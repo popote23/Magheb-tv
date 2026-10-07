@@ -10,10 +10,10 @@ android {
 
     defaultConfig {
         applicationId = "com.maghrebtv.box"
-        minSdk = 34          // Android 14 et plus
-        targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        minSdk = 21          // Android 5.0 et plus : compatible avec presque toutes les box
+        targetSdk = 34
+        versionCode = 2
+        versionName = "2.0"
     }
 
     buildTypes {
@@ -25,6 +25,7 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
+    packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
 }
 
 dependencies {

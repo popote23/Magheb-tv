@@ -42,8 +42,9 @@ import kotlinx.coroutines.delay
 fun PlayerScreen(channels: List<Channel>, startIndex: Int, onBack: () -> Unit) {
     val context = LocalContext.current
     var index by remember { mutableIntStateOf(startIndex) }
+    var urlIdx by remember { mutableIntStateOf(0) }
     var showInfo by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
 
     val exo = remember { ExoPlayer.Builder(context).build().apply { playWhenReady = true } }
@@ -51,10 +52,11 @@ fun PlayerScreen(channels: List<Channel>, startIndex: Int, onBack: () -> Unit) {
     DisposableEffect(Unit) {
         val listener = object : Player.Listener {
             override fun onPlayerError(e: PlaybackException) {
-                error = "Flux indisponible"
+                // Essaie automatiquement la source suivante de la même chaîne
+                if (urlIdx < channels[index].urls.size - 1) urlIdx++ else error = true
             }
             override fun onPlaybackStateChanged(state: Int) {
-                if (state == Player.STATE_READY) error = null
+                if (state == Player.STATE_READY) error = false
             }
         }
         exo.addListener(listener)
@@ -64,14 +66,17 @@ fun PlayerScreen(channels: List<Channel>, startIndex: Int, onBack: () -> Unit) {
         }
     }
 
-    LaunchedEffect(index) {
-        error = null
-        val url = channels[index].url
+    LaunchedEffect(index, urlIdx) {
+        error = false
+        val url = channels[index].urls[urlIdx]
         val item = MediaItem.Builder().setUri(url).apply {
             if (!url.contains(".mpd")) setMimeType(MimeTypes.APPLICATION_M3U8)
         }.build()
         exo.setMediaItem(item)
         exo.prepare()
+    }
+
+    LaunchedEffect(index) {
         showInfo = true
         delay(3_000)
         showInfo = false
@@ -80,6 +85,11 @@ fun PlayerScreen(channels: List<Channel>, startIndex: Int, onBack: () -> Unit) {
     LaunchedEffect(Unit) { focus.requestFocus() }
     BackHandler(onBack = onBack)
 
+    fun zap(delta: Int) {
+        index = (index + delta + channels.size) % channels.size
+        urlIdx = 0
+    }
+
     Box(
         Modifier
             .fillMaxSize()
@@ -87,15 +97,9 @@ fun PlayerScreen(channels: List<Channel>, startIndex: Int, onBack: () -> Unit) {
             .onKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
                 when (e.key) {
-                    Key.DirectionUp, Key.ChannelUp -> {
-                        index = (index + 1) % channels.size; true
-                    }
-                    Key.DirectionDown, Key.ChannelDown -> {
-                        index = (index - 1 + channels.size) % channels.size; true
-                    }
-                    Key.DirectionCenter, Key.Enter -> {
-                        showInfo = true; true
-                    }
+                    Key.DirectionUp, Key.ChannelUp -> { zap(1); true }
+                    Key.DirectionDown, Key.ChannelDown -> { zap(-1); true }
+                    Key.DirectionCenter, Key.Enter -> { showInfo = true; true }
                     else -> false
                 }
             }
@@ -114,8 +118,10 @@ fun PlayerScreen(channels: List<Channel>, startIndex: Int, onBack: () -> Unit) {
             }
         )
         if (showInfo) {
+            val ch = channels[index]
+            val src = if (ch.urls.size > 1) "   (source ${urlIdx + 1}/${ch.urls.size})" else ""
             Text(
-                "${index + 1}/${channels.size}  ${channels[index].name}",
+                "${ch.number}  ${ch.name}$src",
                 color = Color.White,
                 fontSize = 22.sp,
                 modifier = Modifier
@@ -125,9 +131,9 @@ fun PlayerScreen(channels: List<Channel>, startIndex: Int, onBack: () -> Unit) {
                     .padding(12.dp)
             )
         }
-        error?.let {
+        if (error) {
             Text(
-                "$it — ↑ / ↓ pour changer de chaîne",
+                "Flux indisponible — ↑ / ↓ pour changer de chaîne",
                 color = Color.White,
                 fontSize = 22.sp,
                 modifier = Modifier
